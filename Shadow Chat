@@ -1,0 +1,501 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Secure Commlink - Private Chat</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        
+        /* Futuristic Scrollbar */
+        .scrollbar-custom::-webkit-scrollbar {
+            width: 8px;
+        }
+        .scrollbar-custom::-webkit-scrollbar-track {
+            background: #1f2937; /* Dark background */
+        }
+        .scrollbar-custom::-webkit-scrollbar-thumb {
+            background: #0d9488; /* Teal accent */
+            border-radius: 10px;
+        }
+        
+        /* Message Animation */
+        @keyframes slideIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .message-bubble {
+            animation: slideIn 0.2s ease-out forwards;
+        }
+    </style>
+</head>
+<body class="bg-gray-900 h-screen w-full overflow-hidden flex flex-col items-center justify-center text-white">
+
+    <!-- Loading State -->
+    <div id="loading-screen" class="fixed inset-0 bg-gray-900 z-50 flex flex-col items-center justify-center transition-opacity duration-500">
+        <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-teal-400 mb-4"></div>
+        <p class="text-teal-400 font-medium tracking-wider">Establishing Secure Commlink...</p>
+    </div>
+
+    <!-- Room Selection/Creation Modal (New Flow) -->
+    <div id="room-modal" class="hidden fixed inset-0 bg-black/70 backdrop-blur-sm z-40 flex items-center justify-center p-4">
+        <div class="bg-gray-800 rounded-2xl shadow-2xl w-full max-w-md p-8 transform transition-all scale-100 border border-teal-700/50">
+            <div class="text-center mb-8">
+                <i class="fas fa-satellite-dish text-5xl text-teal-400 mb-4 animate-pulse"></i>
+                <h2 class="text-2xl font-bold text-white">Initialize Commlink</h2>
+                <p class="text-gray-400 mt-2">Create a new secure channel or join an existing one.</p>
+            </div>
+            
+            <div class="space-y-6">
+                <!-- Create New Room -->
+                <button id="create-room-btn" class="w-full bg-teal-600 hover:bg-teal-700 text-white font-semibold py-3 rounded-lg transition-colors shadow-lg shadow-teal-600/30 flex items-center justify-center gap-2">
+                    <i class="fas fa-plus-circle"></i> Create New Private Channel
+                </button>
+                
+                <!-- Join Existing Room -->
+                <form id="join-room-form" class="space-y-4 pt-4 border-t border-gray-700">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-300 mb-1">Room ID or Link</label>
+                        <input type="text" id="room-id-input" class="w-full px-4 py-3 rounded-lg bg-gray-700 border border-gray-600 focus:ring-2 focus:ring-teal-500 focus:border-teal-500 outline-none transition-colors text-white" placeholder="Paste link or 6-digit ID" required>
+                    </div>
+                    <button type="submit" class="w-full bg-violet-600 hover:bg-violet-700 text-white font-semibold py-3 rounded-lg transition-colors shadow-lg shadow-violet-600/30 flex items-center justify-center gap-2">
+                        <i class="fas fa-sign-in-alt"></i> Join Channel
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Login/Username Modal -->
+    <div id="login-modal" class="hidden fixed inset-0 bg-black/70 backdrop-blur-sm z-40 flex items-center justify-center p-4">
+        <div class="bg-gray-800 rounded-2xl shadow-2xl w-full max-w-md p-8 transform transition-all scale-100 border border-teal-700/50">
+            <div class="text-center mb-6">
+                <i class="fas fa-user-circle text-5xl text-teal-400 mb-4"></i>
+                <h2 class="text-2xl font-bold text-white">Identify Yourself</h2>
+                <p class="text-gray-400 mt-2">Enter your callsign (Display Name) for this secure channel.</p>
+            </div>
+            
+            <form id="login-form" class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-300 mb-1">Callsign</label>
+                    <input type="text" id="username-input" class="w-full px-4 py-3 rounded-lg bg-gray-700 border border-gray-600 focus:ring-2 focus:ring-teal-500 focus:border-teal-500 outline-none transition-colors text-white" placeholder="e.g. ShadowNet, Agent 47" required maxlength="15">
+                </div>
+                <button type="submit" class="w-full bg-teal-600 hover:bg-teal-700 text-white font-semibold py-3 rounded-lg transition-colors shadow-lg shadow-teal-600/30 flex items-center justify-center gap-2">
+                    Enter Commlink <i class="fas fa-unlock"></i>
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Main Chat Interface -->
+    <div id="chat-interface" class="hidden w-full h-full max-w-4xl bg-gray-800 shadow-2xl flex flex-col relative md:rounded-xl md:h-[90vh] md:my-auto border border-teal-700/50 overflow-hidden">
+        
+        <!-- Header -->
+        <header class="bg-gray-800 border-b border-gray-700 p-4 flex items-center justify-between z-10 shadow-lg shadow-black/20">
+            <div class="flex items-center gap-3">
+                <i class="fas fa-lock text-xl text-teal-400"></i>
+                <div>
+                    <h1 class="font-bold text-white text-lg leading-tight">Secure Commlink</h1>
+                    <div class="flex items-center gap-1.5">
+                        <span id="current-user-display" class="text-xs text-gray-400 font-medium"></span>
+                    </div>
+                </div>
+            </div>
+            <div class="flex items-center gap-2">
+                <button id="copy-link-btn" class="px-3 py-1 bg-gray-700 hover:bg-gray-600 text-teal-400 text-xs font-semibold rounded-full transition-colors flex items-center gap-1" title="Copy Private Join Link">
+                    <i class="fas fa-link"></i> <span class="hidden sm:inline">Room ID: </span> <span id="room-id-display" class="font-mono"></span>
+                </button>
+                <button id="logout-btn" class="p-2 text-gray-400 hover:text-red-500 transition-colors" title="Logout & Leave">
+                    <i class="fas fa-sign-out-alt"></i>
+                </button>
+            </div>
+        </header>
+
+        <!-- Messages Area -->
+        <div id="messages-container" class="flex-1 overflow-y-auto scrollbar-custom p-4 space-y-4 bg-gray-900 relative">
+            <!-- Empty State -->
+            <div id="empty-state" class="hidden absolute inset-0 flex flex-col items-center justify-center text-gray-600 opacity-60 pointer-events-none">
+                <i class="fas fa-rocket text-6xl mb-4"></i>
+                <p class="font-medium tracking-wide">Secure channel established. Awaiting first transmission.</p>
+            </div>
+            <!-- Messages will be injected here -->
+        </div>
+
+        <!-- Input Area -->
+        <footer class="bg-gray-800 p-4 border-t border-gray-700">
+            <form id="message-form" class="flex items-end gap-2 bg-gray-700 p-2 rounded-xl border border-gray-600 focus-within:border-teal-400 focus-within:ring-1 focus-within:ring-teal-400 transition-all">
+                <input type="text" id="message-input" 
+                    class="flex-1 bg-transparent border-none px-4 py-2 focus:ring-0 outline-none max-h-32 text-white placeholder-gray-400" 
+                    placeholder="Transmit secure message..." autocomplete="off">
+                <button type="submit" id="send-btn" class="p-3 bg-teal-600 hover:bg-teal-500 text-gray-900 font-bold rounded-xl shadow-lg shadow-teal-600/30 transition-transform active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed">
+                    <i class="fas fa-paper-plane"></i>
+                </button>
+            </form>
+        </footer>
+    </div>
+
+    <!-- Firebase Scripts -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, addDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // Global Configuration
+        const firebaseConfig = JSON.parse(__firebase_config);
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+
+        // Initialize Firebase
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+
+        // State
+        let currentUser = null;
+        let username = localStorage.getItem('chat_username') || '';
+        let unsubscribeMessages = null;
+        let currentRoomId = null; 
+
+        // DOM Elements
+        const loadingScreen = document.getElementById('loading-screen');
+        const roomModal = document.getElementById('room-modal');
+        const loginModal = document.getElementById('login-modal');
+        const chatInterface = document.getElementById('chat-interface');
+        const loginForm = document.getElementById('login-form');
+        const messageForm = document.getElementById('message-form');
+        const messageInput = document.getElementById('message-input');
+        const messagesContainer = document.getElementById('messages-container');
+        const emptyState = document.getElementById('empty-state');
+        const usernameInput = document.getElementById('username-input');
+        const logoutBtn = document.getElementById('logout-btn');
+        const currentUserDisplay = document.getElementById('current-user-display');
+        const roomIdDisplay = document.getElementById('room-id-display');
+        const copyLinkBtn = document.getElementById('copy-link-btn');
+        const createRoomBtn = document.getElementById('create-room-btn');
+        const joinRoomForm = document.getElementById('join-room-form');
+        const roomIdInput = document.getElementById('room-id-input');
+
+
+        // --- Helper Functions ---
+
+        function getRoomIdFromUrl() {
+            const params = new URLSearchParams(window.location.search);
+            return params.get('room');
+        }
+
+        function generateRoomId() {
+            // Generate a simple, unique 6-character alphanumeric ID
+            return Math.random().toString(36).substring(2, 8).toUpperCase();
+        }
+
+        function formatTime(timestamp) {
+            if (!timestamp) return '';
+            const date = new Date(timestamp);
+            return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        }
+
+        // Sanitize input to prevent basic XSS
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        function scrollToBottom() {
+            // Use requestAnimationFrame to ensure DOM update completes before scroll
+            requestAnimationFrame(() => {
+                messagesContainer.scrollTop = messagesContainer.scrollHeight;
+            });
+        }
+
+        const getRoomMessagesCollectionRef = (roomId) => {
+            // Strict path for private room data
+            return collection(db, 'artifacts', appId, 'public', 'data', 'rooms', roomId, 'messages');
+        };
+
+        // --- UI Flow Functions ---
+
+        function showLoading() {
+            loadingScreen.classList.remove('opacity-0', 'pointer-events-none');
+        }
+
+        function hideLoading() {
+            loadingScreen.classList.add('opacity-0', 'pointer-events-none');
+        }
+
+        function showRoomSelection() {
+            hideLoading();
+            roomModal.classList.remove('hidden');
+            loginModal.classList.add('hidden');
+            chatInterface.classList.add('hidden');
+        }
+
+        function showLogin() {
+            hideLoading();
+            roomModal.classList.add('hidden');
+            loginModal.classList.remove('hidden');
+            chatInterface.classList.add('hidden');
+            if(username) usernameInput.value = username;
+        }
+
+        function showChat() {
+            roomModal.classList.add('hidden');
+            loginModal.classList.add('hidden');
+            chatInterface.classList.remove('hidden');
+            
+            currentUserDisplay.textContent = `Callsign: ${username}`;
+            roomIdDisplay.textContent = currentRoomId;
+            
+            setupRealtimeListener();
+        }
+
+        // --- Core App Flow ---
+
+        function handleRoomJoined(roomId) {
+            currentRoomId = roomId;
+            // Update URL for sharing
+            // FIX: Guard history.pushState against SecurityError when running from blob URLs
+            if (!window.location.protocol.startsWith('blob:')) {
+                history.pushState(null, '', `?room=${roomId}`);
+            }
+            
+            // Proceed to username prompt
+            showLogin();
+        }
+
+
+        // --- Auth & Setup ---
+
+        async function initAuth() {
+            try {
+                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                    await signInWithCustomToken(auth, __initial_auth_token);
+                } else {
+                    await signInAnonymously(auth);
+                }
+            } catch (error) {
+                console.error("Auth error:", error);
+                loadingScreen.innerHTML = `<p class="text-red-500">Authentication Failed. Please refresh.</p>`;
+            }
+        }
+
+        onAuthStateChanged(auth, (user) => {
+            currentUser = user;
+            
+            if (user) {
+                currentRoomId = getRoomIdFromUrl();
+                if (currentRoomId) {
+                    if (username) {
+                        showChat();
+                    } else {
+                        showLogin();
+                    }
+                } else {
+                    showRoomSelection();
+                }
+            }
+        });
+
+
+        // --- Firestore Logic ---
+
+        function setupRealtimeListener() {
+            if (unsubscribeMessages) unsubscribeMessages();
+            if (!currentUser || !currentRoomId) return;
+
+            const q = getRoomMessagesCollectionRef(currentRoomId);
+
+            // Fetch and display messages in real-time
+            unsubscribeMessages = onSnapshot(q, (snapshot) => {
+                const messages = [];
+                snapshot.forEach((doc) => {
+                    const data = doc.data();
+                    if (data.text && data.timestamp) {
+                        messages.push({ id: doc.id, ...data });
+                    }
+                });
+
+                // Client-side sort (Rule: Do not use orderBy in Firestore queries)
+                messages.sort((a, b) => a.timestamp - b.timestamp);
+
+                renderMessages(messages);
+            }, (error) => {
+                console.error("Data fetch error:", error);
+            });
+        }
+
+        async function sendMessage(text) {
+            if (!text.trim() || !currentUser || !currentRoomId) return;
+
+            const payload = {
+                text: text.trim(),
+                username: username,
+                userId: currentUser.uid,
+                timestamp: Date.now(),
+                type: 'text'
+            };
+
+            try {
+                const colRef = getRoomMessagesCollectionRef(currentRoomId);
+                await addDoc(colRef, payload);
+            } catch (e) {
+                console.error("Send error:", e);
+                console.error("Failed to send message: " + e.message);
+            }
+        }
+
+        // --- UI Rendering ---
+
+        function renderMessages(messages) {
+            if (messages.length === 0) {
+                emptyState.classList.remove('hidden');
+                messagesContainer.innerHTML = '';
+                messagesContainer.appendChild(emptyState);
+                return;
+            }
+
+            emptyState.classList.add('hidden');
+            
+            const fragment = document.createDocumentFragment();
+            let lastUser = '';
+
+            messages.forEach(msg => {
+                const isMe = msg.userId === currentUser.uid;
+                const isSameUserAsPrevious = lastUser === msg.userId;
+                lastUser = msg.userId;
+
+                const wrapper = document.createElement('div');
+                wrapper.className = `w-full flex ${isMe ? 'justify-end' : 'justify-start'} mb-2 message-bubble`;
+
+                const bubbleContainer = document.createElement('div');
+                bubbleContainer.className = `max-w-[80%] md:max-w-[60%] flex flex-col ${isMe ? 'items-end' : 'items-start'}`;
+
+                // Username (only show if not me and different from prev)
+                if (!isMe && !isSameUserAsPrevious) {
+                    const nameLabel = document.createElement('span');
+                    nameLabel.className = "text-xs text-gray-400 ml-1 mb-1 font-medium";
+                    nameLabel.textContent = msg.username;
+                    bubbleContainer.appendChild(nameLabel);
+                }
+
+                const bubble = document.createElement('div');
+                // Futuristic/Professional styling
+                const roundedClass = isMe 
+                    ? 'rounded-2xl rounded-tr-sm bg-teal-600 text-white shadow-xl shadow-teal-700/20' 
+                    : 'rounded-2xl rounded-tl-sm bg-gray-700 text-white border border-gray-600 shadow-md';
+                
+                bubble.className = `px-4 py-2 break-words text-sm md:text-base ${roundedClass}`;
+                bubble.innerHTML = escapeHtml(msg.text); // XSS prevention
+
+                const timeLabel = document.createElement('span');
+                timeLabel.className = `text-[10px] block mt-1 ${isMe ? 'text-teal-200 text-right' : 'text-gray-400 text-right'}`;
+                timeLabel.textContent = formatTime(msg.timestamp);
+
+                bubble.appendChild(timeLabel);
+                bubbleContainer.appendChild(bubble);
+                wrapper.appendChild(bubbleContainer);
+                fragment.appendChild(wrapper);
+            });
+
+            messagesContainer.innerHTML = ''; // Clear current
+            messagesContainer.appendChild(fragment);
+            
+            scrollToBottom();
+        }
+
+        // --- Event Listeners ---
+
+        // 1. Room Creation/Joining
+        createRoomBtn.addEventListener('click', () => {
+            const newRoomId = generateRoomId();
+            handleRoomJoined(newRoomId);
+        });
+
+        joinRoomForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            let id = roomIdInput.value.trim();
+            
+            // Check if input is a full URL or just the ID
+            if (id.startsWith(window.location.origin)) {
+                try {
+                    const url = new URL(id);
+                    id = url.searchParams.get('room');
+                } catch (e) {
+                    console.error("Invalid URL format");
+                    return;
+                }
+            }
+
+            if (id) {
+                // Sanitize ID: only use the first 6 characters if it's longer
+                if (id.length > 6) id = id.substring(0, 6).toUpperCase();
+                handleRoomJoined(id);
+            }
+        });
+
+        // 2. Username Submission
+        loginForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            const val = usernameInput.value.trim();
+            if (val) {
+                username = val;
+                localStorage.setItem('chat_username', username);
+                showChat();
+            }
+        });
+
+        // 3. Message Sending
+        messageForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            const text = messageInput.value;
+            if (text.trim()) {
+                sendMessage(text);
+                messageInput.value = '';
+                messageInput.focus();
+            }
+        });
+
+        // 4. Logout (Resets room/user state and shows room selection)
+        logoutBtn.addEventListener('click', () => {
+            localStorage.removeItem('chat_username');
+            // Clear URL and reset state
+            // FIX: Guard history.pushState against SecurityError when running from blob URLs
+            if (!window.location.protocol.startsWith('blob:')) {
+                history.pushState(null, '', window.location.pathname);
+            }
+            currentRoomId = null;
+            username = '';
+            if (unsubscribeMessages) unsubscribeMessages();
+            showRoomSelection();
+        });
+
+        // 5. Copy Link Button
+        copyLinkBtn.addEventListener('click', () => {
+            const fullLink = window.location.origin + window.location.pathname + `?room=${currentRoomId}`;
+            
+            // Copy to clipboard (using execCommand for better iFrame compatibility)
+            const el = document.createElement('textarea');
+            el.value = fullLink;
+            document.body.appendChild(el);
+            el.select();
+            try {
+                document.execCommand('copy');
+                copyLinkBtn.innerHTML = '<i class="fas fa-check-circle"></i> Copied!';
+                setTimeout(() => {
+                    copyLinkBtn.innerHTML = `<i class="fas fa-link"></i> <span class="hidden sm:inline">Room ID: </span> <span id="room-id-display" class="font-mono">${currentRoomId}</span>`;
+                }, 2000);
+            } catch (err) {
+                console.error('Could not copy text: ', err);
+            }
+            document.body.removeChild(el);
+        });
+
+        // Initialize App
+        showLoading();
+        initAuth();
+
+    </script>
+</body>
+</html>
